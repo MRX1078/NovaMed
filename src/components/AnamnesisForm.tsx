@@ -1,31 +1,62 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AnamnesisIn } from '../types/api';
 import { apiService } from '../services/api';
-import { Save, Plus, Trash2 } from 'lucide-react';
+import { Save, Plus, Trash2, Loader } from 'lucide-react';
 
 interface AnamnesisFormProps {
   visitId: number;
-  initialData?: AnamnesisIn;
   onSubmit: (data: AnamnesisIn) => void;
 }
 
-const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ visitId, initialData, onSubmit }) => {
-  const [formData, setFormData] = useState<AnamnesisIn>(initialData || {
-    general: { age: undefined, sex: undefined },
-    genetic: { has_family_history: false, details: '' },
-    lifestyle: {
-      smoking: { yes: false, years: undefined },
-      alcohol: '',
-      activity: '',
-      diet: []
-    },
-    past_conditions: [],
-    surgeries_traumas: [],
-    medications: [],
-    allergies: [],
-    complaints: []
-  });
-  const [isLoading, setIsLoading] = useState(false);
+const defaultFormState: AnamnesisIn = {
+  general: { age: undefined, sex: undefined },
+  genetic: { has_family_history: false, details: '' },
+  lifestyle: {
+    smoking: { yes: false, years: undefined },
+    alcohol: '',
+    activity: '',
+    diet: []
+  },
+  past_conditions: [],
+  surgeries_traumas: [],
+  medications: [],
+  allergies: [],
+  complaints: []
+};
+
+const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ visitId, onSubmit }) => {
+  const [formData, setFormData] = useState<AnamnesisIn>(defaultFormState);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    const loadAnamnesisData = async () => {
+      if (!visitId) return;
+
+      setIsLoading(true);
+      try {
+        const existingData = await apiService.getAnamnesis(visitId);
+        if (existingData) {
+          setFormData({
+            ...defaultFormState,
+            ...existingData,
+            general: { ...defaultFormState.general, ...existingData.general },
+            genetic: { ...defaultFormState.genetic, ...existingData.genetic },
+            lifestyle: { ...defaultFormState.lifestyle, ...existingData.lifestyle, smoking: {...defaultFormState.lifestyle?.smoking, ...existingData.lifestyle?.smoking}},
+          });
+        } else {
+           setFormData(defaultFormState);
+        }
+      } catch (error) {
+        console.log('Anamnesis not found for this visit, starting fresh.', error);
+        setFormData(defaultFormState);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadAnamnesisData();
+  }, [visitId]);
 
   const addArrayItem = (field: keyof AnamnesisIn, value: string) => {
     if (!value.trim()) return;
@@ -83,7 +114,7 @@ const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ visitId, initialData, onS
               <Plus className="h-4 w-4" />
             </button>
           </div>
-          {items.map((item, index) => (
+          {items && items.map((item, index) => (
             <div key={index} className="flex items-center space-x-2 bg-gray-50 px-3 py-2 rounded-md">
               <span className="flex-1 text-sm">{item}</span>
               <button
@@ -100,9 +131,10 @@ const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ visitId, initialData, onS
     );
   };
 
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    setIsSaving(true);
     
     try {
       await apiService.uploadAnamnesis(visitId, formData);
@@ -110,49 +142,35 @@ const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ visitId, initialData, onS
     } catch (error) {
       console.error('Error uploading anamnesis:', error);
     } finally {
-      setIsLoading(false);
+      setIsSaving(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="p-6">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-gray-200 rounded w-1/3"></div>
+          <div className="space-y-4 border-b pb-6">
+            <div className="h-6 bg-gray-200 rounded w-1/4"></div>
+            <div className="h-10 bg-gray-200 rounded"></div>
+          </div>
+          <div className="space-y-4 border-b pb-6">
+            <div className="h-6 bg-gray-200 rounded w-1/4"></div>
+            <div className="h-10 bg-gray-200 rounded"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <h2 className="text-xl font-semibold text-gray-900 mb-6">Анамнез пациента</h2>
       
       <form onSubmit={handleSubmit} className="space-y-8">
-        {/* General Information */}
-        <div className="border-b pb-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Общие данные</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Возраст</label>
-              <input
-                type="number"
-                value={formData.general?.age || ''}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  general: { ...formData.general, age: parseInt(e.target.value) || undefined }
-                })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Пол</label>
-              <select
-                value={formData.general?.sex || ''}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  general: { ...formData.general, sex: e.target.value as any }
-                })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">Выберите пол</option>
-                <option value="male">Мужской</option>
-                <option value="female">Женский</option>
-                <option value="other">Другой</option>
-              </select>
-            </div>
-          </div>
-        </div>
+        
+        {/* БЛОК С ВОЗРАСТОМ И ПОЛОМ УДАЛЕН ИЗ РАЗМЕТКИ */}
 
         {/* Genetic Information */}
         <div className="border-b pb-6">
@@ -165,7 +183,7 @@ const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ visitId, initialData, onS
                 checked={formData.genetic?.has_family_history || false}
                 onChange={(e) => setFormData({
                   ...formData,
-                  genetic: { ...formData.genetic, has_family_history: e.target.checked }
+                  genetic: { ...formData.genetic!, has_family_history: e.target.checked }
                 })}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
@@ -180,7 +198,7 @@ const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ visitId, initialData, onS
                   value={formData.genetic?.details || ''}
                   onChange={(e) => setFormData({
                     ...formData,
-                    genetic: { ...formData.genetic, details: e.target.value }
+                    genetic: { ...formData.genetic!, details: e.target.value }
                   })}
                   rows={3}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -204,8 +222,8 @@ const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ visitId, initialData, onS
                   onChange={(e) => setFormData({
                     ...formData,
                     lifestyle: {
-                      ...formData.lifestyle,
-                      smoking: { ...formData.lifestyle?.smoking, yes: e.target.checked }
+                      ...formData.lifestyle!,
+                      smoking: { ...formData.lifestyle?.smoking!, yes: e.target.checked }
                     }
                   })}
                   className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
@@ -220,8 +238,8 @@ const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ visitId, initialData, onS
                   onChange={(e) => setFormData({
                     ...formData,
                     lifestyle: {
-                      ...formData.lifestyle,
-                      smoking: { ...formData.lifestyle?.smoking, years: parseInt(e.target.value) || undefined }
+                      ...formData.lifestyle!,
+                      smoking: { ...formData.lifestyle?.smoking!, years: parseInt(e.target.value) || undefined }
                     }
                   })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -236,7 +254,7 @@ const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ visitId, initialData, onS
                 value={formData.lifestyle?.alcohol || ''}
                 onChange={(e) => setFormData({
                   ...formData,
-                  lifestyle: { ...formData.lifestyle, alcohol: e.target.value }
+                  lifestyle: { ...formData.lifestyle!, alcohol: e.target.value }
                 })}
                 placeholder="Употребление алкоголя"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -250,7 +268,7 @@ const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ visitId, initialData, onS
                 value={formData.lifestyle?.activity || ''}
                 onChange={(e) => setFormData({
                   ...formData,
-                  lifestyle: { ...formData.lifestyle, activity: e.target.value }
+                  lifestyle: { ...formData.lifestyle!, activity: e.target.value }
                 })}
                 placeholder="Уровень физической активности"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -295,11 +313,15 @@ const AnamnesisForm: React.FC<AnamnesisFormProps> = ({ visitId, initialData, onS
         <div className="flex justify-end pt-6 border-t">
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isSaving}
             className="flex items-center space-x-2 px-6 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-md transition-colors"
           >
-            <Save className="h-4 w-4" />
-            <span>{isLoading ? 'Сохранение...' : 'Сохранить анамнез'}</span>
+            {isSaving ? (
+              <Loader className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            <span>{isSaving ? 'Сохранение...' : 'Сохранить анамнез'}</span>
           </button>
         </div>
       </form>
