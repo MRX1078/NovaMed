@@ -10,7 +10,7 @@ import {
 import { mockApiService } from './mockApi';
 
 // 1. Указываем полный URL вашего API
-const API_BASE = 'https://46.253.132.35/api'; 
+const API_BASE = 'https://176.109.105.255.sslip.io/api'; 
 
 // 2. Отключаем моки, чтобы использовать реальный API
 const USE_MOCK_API = false;
